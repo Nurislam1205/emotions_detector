@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emotion Detector</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f0f1a;
+      color: #e0e0f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #a78bfa, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      color: #7c7c9e;
+      font-size: 0.9rem;
+      margin-bottom: 32px;
+    }
+
+    .card {
+      background: #16162a;
+      border: 1px solid #2a2a4a;
+      border-radius: 16px;
+      padding: 28px;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .status-badge {
+      font-size: 0.75rem;
+      padding: 3px 10px;
+      border-radius: 99px;
+      display: inline-block;
+      margin-bottom: 18px;
+    }
+    .status-badge.ok  { background: #0d2a1a; color: #2ecc71; border: 1px solid #2ecc7155; }
+    .status-badge.err { background: #2a0f0f; color: #e74c3c; border: 1px solid #e74c3c55; }
+
+    /* ── Input ── */
+    textarea {
+      width: 100%;
+      background: #0f0f1a;
+      border: 1px solid #2a2a4a;
+      border-radius: 10px;
+      color: #e0e0f0;
+      font-size: 0.95rem;
+      padding: 14px;
+      resize: vertical;
+      min-height: 110px;
+      outline: none;
+      transition: border-color .2s;
+      font-family: inherit;
+    }
+    textarea:focus { border-color: #a78bfa; }
+
+    .analyze-btn {
+      width: 100%;
+      margin-top: 14px;
+      padding: 13px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, #a78bfa, #60a5fa);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s;
+    }
+    .analyze-btn:hover    { opacity: 0.88; }
+    .analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Two columns ── */
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 24px;
+    }
+    @media (max-width: 600px) {
+      .results-grid { grid-template-columns: 1fr; }
+    }
+
+    .result-col {
+      background: #0f0f1a;
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 18px;
+      min-height: 200px;
+      position: relative;
+    }
+
+    .col-header {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .col-header.local { color: #a78bfa; }
+    .col-header.grok  { color: #60a5fa; }
+
+    /* ── Emotion card ── */
+    .emotion-card {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .emotion-card.visible { display: flex; }
+
+    .emotion-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .e-icon  { font-size: 2.4rem; line-height: 1; }
+    .e-label { font-size: 1.3rem; font-weight: 700; }
+    .e-sub   { font-size: 0.78rem; color: #7c7c9e; margin-top: 2px; }
+
+    .conf-wrap { margin-top: 2px; }
+    .conf-label {
+      font-size: 0.78rem; color: #7c7c9e;
+      display: flex; justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .conf-bar {
+      height: 7px; border-radius: 99px;
+      background: #2a2a4a; overflow: hidden;
+    }
+    .conf-fill {
+      height: 100%; border-radius: 99px;
+      transition: width .6s ease;
+    }
+
+    /* ── Top-3 ── */
+    .top3-title {
+      font-size: 0.75rem; color: #5c5c7e;
+      text-transform: uppercase; letter-spacing: .06em;
+      margin-bottom: 8px;
+    }
+    .top3-list { display: flex; flex-direction: column; gap: 6px; }
+    .top3-item {
+      display: flex; align-items: center;
+      gap: 8px; font-size: 0.84rem;
+    }
+    .t-icon { font-size: 1rem; }
+    .t-name { flex: 1; color: #b0b0d0; }
+    .t-bar  { flex: 2; height: 5px; background: #2a2a4a; border-radius: 99px; overflow: hidden; }
+    .t-bar-fill { height: 100%; border-radius: 99px; }
+    .t-pct  { width: 38px; text-align: right; color: #7c7c9e; font-size: 0.78rem; }
+
+    /* ── Explanation ── */
+    .explanation {
+      font-size: 0.84rem; color: #a0a0c0;
+      line-height: 1.5; padding: 10px 12px;
+      background: #16162a; border-radius: 8px;
+      border: 1px solid #2a2a4a;
+    }
+
+    /* ── Loading / Error states ── */
+    .col-loading {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 140px;
+      color: #7c7c9e;
+      font-size: 0.88rem;
+    }
+    .col-loading.visible { display: flex; }
+
+    .col-error {
+      display: none;
+      padding: 10px 12px;
+      background: #2a0f0f;
+      border: 1px solid #e74c3c55;
+      border-radius: 8px;
+      color: #ff6b6b;
+      font-size: 0.84rem;
+      margin-top: 8px;
+    }
+    .col-error.visible { display: block; }
+
+    .spinner {
+      width: 24px; height: 24px;
+      border: 2px solid #ffffff22;
+      border-top-color: #a78bfa;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    .spinner.blue { border-top-color: #60a5fa; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Stats section ── */
+    .stats-section {
+      width: 100%;
+      max-width: 900px;
+      margin-top: 28px;
+    }
+
+    .stats-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #c4b5fd;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stats-subtitle {
+      font-size: 0.78rem;
+      color: #5c5c7e;
+      margin-left: 4px;
+      font-weight: 400;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 640px) {
+      .charts-grid { grid-template-columns: 1fr; }
+    }
+
+    .chart-card {
+      background: #16162a;
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .chart-card.wide {
+      grid-column: span 2;
+    }
+
+    @media (max-width: 640px) {
+      .chart-card.wide { grid-column: span 1; }
+    }
+
+    .chart-with-code {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    @media (max-width: 700px) {
+      .chart-with-code { grid-template-columns: 1fr; }
+    }
+
+    .chart-with-code.wide-code {
+      grid-template-columns: 2fr 1fr;
+    }
+
+    pre.py-code {
+      background: #0a0a14;
+      border: 1px solid #2a2a4a;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 0.74rem;
+      line-height: 1.6;
+      overflow-x: auto;
+      color: #c4b5fd;
+      font-family: 'Fira Code', 'Consolas', monospace;
+      margin: 0;
+      white-space: pre;
+    }
+
+    .code-label {
+      font-size: 0.7rem;
+      color: #5c5c7e;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 6px;
+    }
+
+    /* syntax highlight */
+    pre.py-code .kw  { color: #60a5fa; }  /* keywords */
+    pre.py-code .fn  { color: #f59e0b; }  /* functions */
+    pre.py-code .st  { color: #34d399; }  /* strings */
+    pre.py-code .cm  { color: #4a4a6a; }  /* comments */
+    pre.py-code .nm  { color: #f472b6; }  /* numbers */
+
+    .chart-label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #7c7c9e;
+      margin-bottom: 14px;
+    }
+
+    .stat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #0f0f1a;
+      border: 1px solid #2a2a4a;
+      border-radius: 99px;
+      padding: 4px 12px;
+      font-size: 0.8rem;
+      color: #a0a0c0;
+      margin-bottom: 16px;
+    }
+
+    .stat-pill strong { color: #c4b5fd; }
+  </style>
+</head>
+<body>
+
+  <h1>Emotion Detector</h1>
+  <p class="subtitle">Одно поле — два ответа: локальная модель и Grok AI</p>
+  <div class="card">
+    <div id="model-status" class="status-badge err">Модель не загружена</div>
+
+    <textarea
+      id="text-input"
+      placeholder="Введи текст на английском... (Enter = отправить)"
+      oninput="onTextInput()"
+    ></textarea>
+
+    <button class="analyze-btn" id="analyze-btn" onclick="analyze()" disabled>
+      Анализировать
+    </button>
+
+    <!-- Two columns -->
+    <div class="results-grid">
+
+      <!-- Left: Local model -->
+      <div class="result-col">
+        <div class="col-header local">🤖 Локальная модель</div>
+
+        <div class="col-loading" id="local-loading">
+          <div class="spinner"></div>
+          <span>Анализирую...</span>
+        </div>
+        <div class="col-error" id="local-error"></div>
+
+        <div class="emotion-card" id="local-card">
+          <div class="emotion-main">
+            <div class="e-icon" id="local-icon">😐</div>
+            <div>
+              <div class="e-label" id="local-label">—</div>
+              <div class="e-sub"   id="local-sub"></div>
+            </div>
+          </div>
+          <div class="conf-wrap">
+            <div class="conf-label">
+              <span>Уверенность</span>
+              <span id="local-conf-txt">0%</span>
+            </div>
+            <div class="conf-bar">
+              <div class="conf-fill" id="local-conf-fill" style="width:0%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="top3-title">Топ эмоций</div>
+            <div class="top3-list" id="local-top3"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Grok -->
+      <div class="result-col">
+        <div class="col-header grok">✨ Grok AI</div>
+
+        <div class="col-loading" id="grok-loading">
+          <div class="spinner blue"></div>
+          <span>Спрашиваю Grok...</span>
+        </div>
+        <div class="col-error" id="grok-error"></div>
+
+        <div class="emotion-card" id="grok-card">
+          <div class="emotion-main">
+            <div class="e-icon" id="grok-icon">😐</div>
+            <div>
+              <div class="e-label" id="grok-label">—</div>
+              <div class="e-sub"   id="grok-sub"></div>
+            </div>
+          </div>
+          <div class="conf-wrap">
+            <div class="conf-label">
+              <span>Уверенность</span>
+              <span id="grok-conf-txt">0%</span>
+            </div>
+            <div class="conf-bar">
+              <div class="conf-fill" id="grok-conf-fill" style="width:0%"></div>
+            </div>
+          </div>
+          <div class="explanation" id="grok-explanation" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- 5. Sentiment groups -->
+      <div class="chart-card">
+        <div class="chart-label">Позитивные / Негативные / Нейтральные</div>
+        <div class="chart-with-code" style="grid-template-columns:1fr">
+          <canvas id="chart-groups" height="200"></canvas>
+          <div>
+            <div class="code-label">Python код</div>
+            <pre class="py-code"><span class="cm"># Группировка по тональности</span>
+POS = {<span class="st">'happiness'</span>,<span class="st">'love'</span>,
+       <span class="st">'fun'</span>,<span class="st">'enthusiasm'</span>,
+       <span class="st">'relief'</span>,<span class="st">'surprise'</span>}
+NEG = {<span class="st">'sadness'</span>,<span class="st">'anger'</span>,
+       <span class="st">'hate'</span>,<span class="st">'worry'</span>,
+       <span class="st">'boredom'</span>}
+
+<span class="kw">def</span> <span class="fn">group</span>(e):
+    <span class="kw">if</span> e <span class="kw">in</span> POS: <span class="kw">return</span> <span class="st">'Positive'</span>
+    <span class="kw">if</span> e <span class="kw">in</span> NEG: <span class="kw">return</span> <span class="st">'Negative'</span>
+    <span class="kw">return</span> <span class="st">'Neutral'</span>
+
+df[<span class="st">'group'</span>] = (
+    df[<span class="st">'sentiment'</span>].<span class="fn">apply</span>(group))
+
+grp = df[<span class="st">'group'</span>].<span class="fn">value_counts</span>()
+plt.<span class="fn">pie</span>(grp.values,
+        labels=grp.index,
+        autopct=<span class="st">'%1.1f%%'</span>)
+plt.<span class="fn">show</span>()</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. Top words per emotion -->
+      <div class="chart-card">
+        <div class="chart-label">
+          Топ слов по эмоции:
+          <select id="emotion-select" onchange="updateEmotionWords()"
+            style="background:#0f0f1a;border:1px solid #2a2a4a;color:#e0e0f0;
+                   border-radius:6px;padding:2px 8px;font-size:0.78rem;margin-left:6px;cursor:pointer;">
+          </select>
+        </div>
+        <div class="chart-with-code" style="grid-template-columns:1fr">
+          <canvas id="chart-emotion-words" height="200"></canvas>
+          <div>
+            <div class="code-label">Python код</div>
+            <pre class="py-code"><span class="cm"># Топ слов для эмоции</span>
+emotion = <span class="st">'sadness'</span>
+edf = df[df[<span class="st">'sentiment'</span>]
+         == emotion]
+
+words = []
+<span class="kw">for</span> txt <span class="kw">in</span> edf[<span class="st">'content'</span>]:
+  words += [
+    w.<span class="fn">lower</span>() <span class="kw">for</span> w
+    <span class="kw">in</span> re.<span class="fn">findall</span>(
+      <span class="st">r"[a-zA-Z']+"</span>, txt)
+    <span class="kw">if</span> w <span class="kw">not in</span> STOPWORDS
+  ]
+
+top7 = Counter(words)
+       .<span class="fn">most_common</span>(<span class="nm">7</span>)
+
+sns.<span class="fn">barplot</span>(
+  x=[c <span class="kw">for</span> _,c <span class="kw">in</span> top7],
+  y=[w <span class="kw">for</span> w,_ <span class="kw">in</span> top7])
+plt.<span class="fn">show</span>()</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7. Length percentiles -->
+      <div class="chart-card wide">
+        <div class="chart-label">Длина твитов: медиана / перцентили P25–P75</div>
+        <div class="chart-with-code wide-code">
+          <canvas id="chart-percentiles" height="120"></canvas>
+          <div>
+            <div class="code-label">Python код</div>
+            <pre class="py-code"><span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="cm"># Перцентили длин по эмоции</span>
+perc = (
+  df.<span class="fn">groupby</span>(<span class="st">'sentiment'</span>)[
+    <span class="st">'word_count'</span>
+  ].<span class="fn">quantile</span>([<span class="nm">0.25</span>,<span class="nm">0.5</span>,<span class="nm">0.75</span>])
+  .<span class="fn">unstack</span>()
+)
+
+<span class="kw">for</span> emotion \
+    <span class="kw">in</span> perc.index:
+  p25 = perc.loc[emotion, <span class="nm">0.25</span>]
+  med = perc.loc[emotion, <span class="nm">0.50</span>]
+  p75 = perc.loc[emotion, <span class="nm">0.75</span>]
+  plt.<span class="fn">barh</span>(emotion,
+           p75-p25, left=p25)
+  plt.<span class="fn">plot</span>(med, emotion, <span class="st">'|'</span>)
+
+plt.<span class="fn">title</span>(<span class="st">'P25–P75 per Emotion'</span>)
+plt.<span class="fn">show</span>()</pre>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div> -->
+  <div class="stats-section">
+    <div class="stats-title">
+      📊 Статистика датасета
+      <span class="stats-subtitle">tweet_emotions.csv — данные на которых обучалась модель</span>
+    </div>
+
+    <div id="stats-total" class="stat-pill" style="display:none">
+      Всего твитов: <strong id="total-count">—</strong>
+    </div>
+
+    <div class="charts-grid">
+
+      <!-- 1. Emotion distribution -->
+      <div class="chart-card wide">
+        <div class="chart-label">Распределение эмоций</div>
+        <div class="chart-with-code wide-code">
+          <canvas id="chart-dist" height="120"></canvas>
+          <div>
+            <div class="code-label">Python код</div>
+            <pre class="py-code"><span class="kw">import</span> pandas <span class="kw">as</span> pd
+<span class="kw">import</span> seaborn <span class="kw">as</span> sns
+<span class="kw">import</span> matplotlib.pyplot <span class="kw">as</span> plt
+
+df = pd.<span class="fn">read_csv</span>(<span class="st">'tweet_emotions.csv'</span>)
+
+counts = df[<span class="st">'sentiment'</span>].<span class="fn">value_counts</span>()
+
+plt.<span class="fn">figure</span>(figsize=(<span class="nm">10</span>, <span class="nm">5</span>))
+sns.<span class="fn">barplot</span>(
+    x=counts.values,
+    y=counts.index,
+    palette=<span class="st">'viridis'</span>
+)
+plt.<span class="fn">title</span>(<span class="st">'Emotion Distribution'</span>)
+plt.<span class="fn">xlabel</span>(<span class="st">'Count'</span>)
+plt.<span class="fn">tight_layout</span>()
+plt.<span class="fn">show</span>()</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Avg text length -->
+      <div class="chart-card">
+        <div class="chart-label">Средняя длина текста по эмоции</div>
+        <div class="chart-with-code" style="grid-template-columns:1fr">
+          <canvas id="chart-avglen" height="200"></canvas>
+          <div>
+            <div class="code-label">Python код</div>
+            <pre class="py-code"><span class="kw">import</span> numpy <span class="kw">as</span> np
+
+df[<span class="st">'word_count'</span>] = (
+  df[<span class="st">'content'</span>]
+  .<span class="fn">astype</span>(<span class="st">str</span>)
+  .<span class="fn">apply</span>(<span class="kw">lambda</span> x:
+    <span class="fn">len</span>(x.<span class="fn">split</span>()))
+)
+
+avg = df.<span class="fn">groupby</span>(<span class="st">'sentiment'</span>)[
+  <span class="st">'word_count'</span>
+].<span class="fn">mean</span>().<span class="fn">sort_values</span>()
+
+sns.<span class="fn">barplot</span>(
+  x=avg.values,
+  y=avg.index,
+  palette=<span class="st">'coolwarm'</span>
+)
+plt.<span class="fn">title</span>(<span class="st">'Avg Words / Emotion'</span>)
+plt.<span class="fn">show</span>()</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Top words -->
+      <div class="chart-card">
+        <div class="chart-label">Топ-10 самых частых слов</div>
+        <div class="chart-with-code" style="grid-template-columns:1fr">
+          <canvas id="chart-words" height="200"></canvas>
+          <div>
+            <div class="code-label">Python код</div>
+            <pre class="py-code"><span class="kw">from</span> collections <span class="kw">import</span> Counter
+<span class="kw">import</span> re
+
+STOP = {<span class="st">'i'</span>, <span class="st">'the'</span>, <span class="st">'a'</span>,
+        <span class="st">'to'</span>, <span class="st">'and'</span>, <span class="st">'is'</span>}
+
+words = []
+<span class="kw">for</span> txt <span class="kw">in</span> df[<span class="st">'content'</span>]:
+  words += [
+    w.<span class="fn">lower</span>() <span class="kw">for</span> w
+    <span class="kw">in</span> re.<span class="fn">findall</span>(
+      <span class="st">r"[a-zA-Z']+"</span>, txt)
+    <span class="kw">if</span> w <span class="kw">not in</span> STOP
+    <span class="kw">and</span> <span class="fn">len</span>(w) > <span class="nm">2</span>
+  ]
+
+top = Counter(words).<span class="fn">most_common</span>(<span class="nm">10</span>)
+words, cnts = <span class="fn">zip</span>(*top)
+
+sns.<span class="fn">barplot</span>(x=<span class="fn">list</span>(cnts),
+            y=<span class="fn">list</span>(words))
+plt.<span class="fn">show</span>()</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Length histogram -->
+      <div class="chart-card wide">
+        <div class="chart-label">Длина твитов (кол-во слов)</div>
+        <div class="chart-with-code wide-code">
+          <canvas id="chart-lengths" height="100"></canvas>
+          <div>
+            <div class="code-label">Python код</div>
+            <pre class="py-code"><span class="cm"># Гистограмма длин твитов</span>
+df[<span class="st">'word_count'</span>] = (
+  df[<span class="st">'content'</span>]
+  .<span class="fn">astype</span>(<span class="st">str</span>)
+  .<span class="fn">apply</span>(<span class="kw">lambda</span> x:
+    <span class="fn">len</span>(x.<span class="fn">split</span>()))
+)
+
+bins = [<span class="nm">0</span>,<span class="nm">5</span>,<span class="nm">10</span>,<span class="nm">20</span>,
+        <span class="nm">30</span>,<span class="nm">50</span>,<span class="nm">100</span>,<span class="nm">999</span>]
+
+plt.<span class="fn">figure</span>(figsize=(<span class="nm">10</span>,<span class="nm">4</span>))
+plt.<span class="fn">hist</span>(
+  df[<span class="st">'word_count'</span>],
+  bins=bins,
+  color=<span class="st">'#60a5fa'</span>,
+  edgecolor=<span class="st">'white'</span>
+)
+plt.<span class="fn">title</span>(
+  <span class="st">'Tweet Length Distribution'</span>)
+plt.<span class="fn">xlabel</span>(<span class="st">'Words per tweet'</span>)
+plt.<span class="fn">show</span>()</pre>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://js.puter.com/v2/"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    const EMOTION_META = {
+      anger:      { icon: "😠", color: "#e74c3c", label: "Злость" },
+      boredom:    { icon: "😑", color: "#95a5a6", label: "Скука" },
+      enthusiasm: { icon: "🤩", color: "#f39c12", label: "Энтузиазм" },
+      empty:      { icon: "😶", color: "#bdc3c7", label: "Пустота" },
+      fun:        { icon: "😄", color: "#2ecc71", label: "Веселье" },
+      happiness:  { icon: "😊", color: "#27ae60", label: "Счастье" },
+      hate:       { icon: "🤬", color: "#c0392b", label: "Ненависть" },
+      love:       { icon: "❤️",  color: "#e91e63", label: "Любовь" },
+      neutral:    { icon: "😐", color: "#7f8c8d", label: "Нейтрально" },
+      relief:     { icon: "😌", color: "#1abc9c", label: "Облегчение" },
+      sadness:    { icon: "😢", color: "#3498db", label: "Грусть" },
+      surprise:   { icon: "😲", color: "#9b59b6", label: "Удивление" },
+      worry:      { icon: "😟", color: "#e67e22", label: "Тревога" },
+    };
+
+    function getMeta(emotion) {
+      return EMOTION_META[emotion.toLowerCase()] || { icon: "🤔", color: "#555", label: emotion };
+    }
+
+    // Model status
+    fetch('/model/status').then(r => r.json()).then(d => {
+      const b = document.getElementById('model-status');
+      b.textContent = d.loaded ? '✓ Локальная модель готова' : '⚠ Модель не загружена — запусти python train.py';
+      b.className = 'status-badge ' + (d.loaded ? 'ok' : 'err');
+    });
+
+    function onTextInput() {
+      document.getElementById('analyze-btn').disabled =
+        document.getElementById('text-input').value.trim().length === 0;
+    }
+
+    // ── Render local result ──────────────────────────────────────
+    function renderLocal(data) {
+      document.getElementById('local-loading').classList.remove('visible');
+      const meta = getMeta(data.emotion);
+      document.getElementById('local-icon').textContent = meta.icon;
+      document.getElementById('local-label').textContent = meta.label;
+      document.getElementById('local-sub').textContent = data.emotion;
+
+      const conf = data.confidence || 0;
+      document.getElementById('local-conf-txt').textContent = conf.toFixed(1) + '%';
+      const fill = document.getElementById('local-conf-fill');
+      fill.style.width = conf + '%';
+      fill.style.background = meta.color;
+
+      const list = document.getElementById('local-top3');
+      list.innerHTML = '';
+      (data.top3 || []).forEach(item => {
+        const m = getMeta(item.emotion);
+        const div = document.createElement('div');
+        div.className = 'top3-item';
+        div.innerHTML = `
+          <span class="t-icon">${m.icon}</span>
+          <span class="t-name">${m.label}</span>
+          <div class="t-bar"><div class="t-bar-fill" style="width:${item.prob}%;background:${m.color}"></div></div>
+          <span class="t-pct">${item.prob}%</span>`;
+        list.appendChild(div);
+      });
+
+      document.getElementById('local-card').classList.add('visible');
+    }
+
+    // ── Render Grok result ───────────────────────────────────────
+    function renderGrok(data) {
+      document.getElementById('grok-loading').classList.remove('visible');
+      const meta = getMeta(data.emotion);
+      document.getElementById('grok-icon').textContent = meta.icon;
+      document.getElementById('grok-label').textContent = meta.label;
+      document.getElementById('grok-sub').textContent = data.emotion;
+
+      const conf = data.confidence || 0;
+      document.getElementById('grok-conf-txt').textContent = conf.toFixed(1) + '%';
+      const fill = document.getElementById('grok-conf-fill');
+      fill.style.width = conf + '%';
+      fill.style.background = meta.color;
+
+      const exp = document.getElementById('grok-explanation');
+      if (data.explanation) {
+        exp.textContent = '💬 ' + data.explanation;
+        exp.style.display = 'block';
+      }
+
+      document.getElementById('grok-card').classList.add('visible');
+    }
+
+    // ── Grok via Puter.js ────────────────────────────────────────
+    async function callGrok(text) {
+      const emotionList = Object.keys(EMOTION_META).join(', ');
+      const prompt = `Analyze the emotion in the following text and respond ONLY with valid JSON.
+
+Text: "${text}"
+
+Choose the single best emotion from this list: ${emotionList}
+
+Respond with this exact JSON format (nothing else):
+{
+  "emotion": "<emotion from list>",
+  "confidence": <number 0-100>,
+  "explanation": "<one sentence explanation in Russian>"
+}`;
+
+      const response = await puter.ai.chat(prompt, { model: 'x-ai/grok-3-mini-fast' });
+      const raw = response.message.content.trim();
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('Не удалось разобрать ответ Grok');
+      const result = JSON.parse(match[0]);
+      return {
+        emotion: (result.emotion || 'neutral').toLowerCase(),
+        confidence: parseFloat(result.confidence || 0),
+        explanation: result.explanation || '',
+      };
+    }
+
+    // ── Main analyze ─────────────────────────────────────────────
+    async function analyze() {
+      const text = document.getElementById('text-input').value.trim();
+      if (!text) return;
+
+      // Reset
+      ['local-card', 'grok-card'].forEach(id => document.getElementById(id).classList.remove('visible'));
+      ['local-error', 'grok-error'].forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.remove('visible'); el.textContent = '';
+      });
+      document.getElementById('grok-explanation').style.display = 'none';
+
+      // Show loaders
+      document.getElementById('local-loading').classList.add('visible');
+      document.getElementById('grok-loading').classList.add('visible');
+
+      const btn = document.getElementById('analyze-btn');
+      btn.disabled = true;
+      btn.textContent = 'Анализирую...';
+
+      // Run both in parallel
+      const [localResult, grokResult] = await Promise.allSettled([
+        fetch('/predict/local', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        }).then(r => r.json()),
+        callGrok(text),
+      ]);
+
+      // Local result
+      if (localResult.status === 'fulfilled' && !localResult.value.error) {
+        renderLocal(localResult.value);
+      } else {
+        document.getElementById('local-loading').classList.remove('visible');
+        const err = document.getElementById('local-error');
+        err.textContent = '⚠ ' + (localResult.reason?.message || localResult.value?.error || 'Ошибка');
+        err.classList.add('visible');
+      }
+
+      // Grok result
+      if (grokResult.status === 'fulfilled') {
+        renderGrok(grokResult.value);
+      } else {
+        document.getElementById('grok-loading').classList.remove('visible');
+        const err = document.getElementById('grok-error');
+        err.textContent = '⚠ ' + (grokResult.reason?.message || 'Ошибка Grok');
+        err.classList.add('visible');
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Анализировать';
+    }
+
+    document.getElementById('text-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (!document.getElementById('analyze-btn').disabled) analyze();
+      }
+    });
+
+    // ── Chart defaults ───────────────────────────────────────────
+    Chart.defaults.color = '#7c7c9e';
+    Chart.defaults.borderColor = '#2a2a4a';
+    Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+
+    function makeChart(id, type, labels, data, colors, opts = {}) {
+      return new Chart(document.getElementById(id), {
+        type,
+        data: {
+          labels,
+          datasets: [{
+            data,
+            backgroundColor: Array.isArray(colors) ? colors : colors,
+            borderColor: Array.isArray(colors) ? colors.map(c => c + 'cc') : colors + 'cc',
+            borderWidth: 1,
+            borderRadius: 6,
+            ...opts.dataset,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#1a1a2e',
+              borderColor: '#2a2a4a',
+              borderWidth: 1,
+              titleColor: '#e0e0f0',
+              bodyColor: '#a0a0c0',
+            },
+          },
+          scales: type !== 'pie' && type !== 'doughnut' ? {
+            x: { grid: { color: '#1e1e3a' }, ticks: { color: '#7c7c9e' } },
+            y: { grid: { color: '#1e1e3a' }, ticks: { color: '#7c7c9e' } },
+          } : undefined,
+          ...opts.chart,
+        },
+      });
+    }
+
+    let _statsData = null;
+    let _emotionWordsChart = null;
+
+    fetch('/stats').then(r => r.json()).then(s => {
+      if (s.error) return;
+      _statsData = s;
+
+      document.getElementById('total-count').textContent = s.total.toLocaleString();
+      document.getElementById('stats-total').style.display = 'inline-flex';
+
+      // 1. Emotion distribution
+      makeChart('chart-dist', 'bar',
+        s.distribution.labels_ru,
+        s.distribution.counts,
+        s.distribution.colors,
+        { chart: { indexAxis: 'y' } }
+      );
+
+      // 2. Avg text length
+      makeChart('chart-avglen', 'bar',
+        s.avg_length.labels_ru,
+        s.avg_length.values,
+        s.avg_length.colors,
+        { chart: { indexAxis: 'y' } }
+      );
+
+      // 3. Top words
+      makeChart('chart-words', 'bar',
+        s.top_words.words,
+        s.top_words.counts,
+        '#a78bfa',
+        { chart: { indexAxis: 'y' } }
+      );
+
+      // 4. Text length histogram
+      makeChart('chart-lengths', 'bar',
+        s.text_lengths.labels,
+        s.text_lengths.counts,
+        '#60a5fa'
+      );
+
+      // 5. Sentiment groups — doughnut
+      new Chart(document.getElementById('chart-groups'), {
+        type: 'doughnut',
+        data: {
+          labels: s.sentiment_groups.labels,
+          datasets: [{
+            data: s.sentiment_groups.counts,
+            backgroundColor: s.sentiment_groups.colors,
+            borderColor: '#16162a',
+            borderWidth: 3,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: { color: '#a0a0c0', padding: 12, font: { size: 11 } },
+            },
+            tooltip: {
+              backgroundColor: '#1a1a2e',
+              borderColor: '#2a2a4a',
+              borderWidth: 1,
+              callbacks: {
+                label: ctx => {
+                  const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
+                  const pct = ((ctx.raw / total) * 100).toFixed(1);
+                  return ` ${ctx.raw.toLocaleString()} (${pct}%)`;
+                }
+              }
+            },
+          },
+        },
+      });
+
+      // 6. Top words per emotion — populate select
+      const sel = document.getElementById('emotion-select');
+      Object.entries(s.top_per_emotion).forEach(([key, val]) => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = val.label;
+        sel.appendChild(opt);
+      });
+      updateEmotionWords();
+
+      // 7. Length percentiles — grouped bar (p25, median, p75)
+      const pdata = s.length_percentiles;
+      new Chart(document.getElementById('chart-percentiles'), {
+        type: 'bar',
+        data: {
+          labels: pdata.labels_ru,
+          datasets: [
+            {
+              label: 'P25',
+              data: pdata.p25,
+              backgroundColor: '#2a2a4a',
+              borderRadius: 4,
+              borderWidth: 0,
+            },
+            {
+              label: 'Медиана',
+              data: pdata.median,
+              backgroundColor: pdata.colors,
+              borderRadius: 4,
+              borderWidth: 0,
+            },
+            {
+              label: 'P75',
+              data: pdata.p75,
+              backgroundColor: pdata.colors.map(c => c + '55'),
+              borderRadius: 4,
+              borderWidth: 0,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              display: true,
+              labels: { color: '#7c7c9e', font: { size: 11 } },
+            },
+            tooltip: { backgroundColor: '#1a1a2e', borderColor: '#2a2a4a', borderWidth: 1 },
+          },
+          scales: {
+            x: { grid: { color: '#1e1e3a' }, ticks: { color: '#7c7c9e' } },
+            y: {
+              grid: { color: '#1e1e3a' },
+              ticks: { color: '#7c7c9e' },
+              title: { display: true, text: 'слов', color: '#5c5c7e' },
+            },
+          },
+        },
+      });
+
+    }).catch(() => {});
+
+    function updateEmotionWords() {
+      const sel = document.getElementById('emotion-select');
+      const emotion = sel.value;
+      if (!_statsData || !_statsData.top_per_emotion[emotion]) return;
+      const d = _statsData.top_per_emotion[emotion];
+
+      if (_emotionWordsChart) _emotionWordsChart.destroy();
+      _emotionWordsChart = new Chart(document.getElementById('chart-emotion-words'), {
+        type: 'bar',
+        data: {
+          labels: d.words,
+          datasets: [{
+            data: d.counts,
+            backgroundColor: d.color,
+            borderColor: d.color + 'cc',
+            borderWidth: 1,
+            borderRadius: 6,
+          }],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: { backgroundColor: '#1a1a2e', borderColor: '#2a2a4a', borderWidth: 1 },
+          },
+          scales: {
+            x: { grid: { color: '#1e1e3a' }, ticks: { color: '#7c7c9e' } },
+            y: { grid: { color: '#1e1e3a' }, ticks: { color: '#7c7c9e' } },
+          },
+        },
+      });
+    }
+  </script>
+</body>
+</html>
